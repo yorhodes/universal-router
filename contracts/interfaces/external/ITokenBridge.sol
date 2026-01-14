@@ -58,4 +58,15 @@ interface ITokenBridge {
     /// @notice Registers a domain on the bridge
     /// @param _domain The domain to register
     function registerDomain(uint32 _domain) external;
+
+    /// @notice Transfers tokens to the recipient on the destination domain
+    /// @param _destination The destination domain
+    /// @param _recipient The recipient address (as bytes32)
+    /// @param _amountOrId The amount of tokens to send
+    /// @return messageId The identifier of the dispatched message
+    function transferRemote(
+        uint32 _destination,
+        bytes32 _recipient,
+        uint256 _amountOrId
+    ) external payable returns (bytes32 messageId);
 }

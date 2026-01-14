@@ -327,12 +327,13 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     (success, output) =
                         address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
                 } else if (command == Commands.BRIDGE_TOKEN) {
-                    // equivalent: abi.decode(inputs, (uint8, address, address, address, uint256, uint256, uint32, bool))
+                    // equivalent: abi.decode(inputs, (uint8, address, address, address, uint256, uint256, uint256, uint32, bool))
                     uint8 bridgeType;
                     address recipient;
                     address token;
                     address bridge;
                     uint256 amount;
+                    uint256 msgFee;
                     uint256 tokenFee;
                     uint32 domain;
                     bool payerIsUser;
@@ -342,9 +343,10 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         token := calldataload(add(inputs.offset, 0x40))
                         bridge := calldataload(add(inputs.offset, 0x60))
                         amount := calldataload(add(inputs.offset, 0x80))
-                        tokenFee := calldataload(add(inputs.offset, 0xA0))
-                        domain := calldataload(add(inputs.offset, 0xC0))
-                        payerIsUser := calldataload(add(inputs.offset, 0xE0))
+                        msgFee := calldataload(add(inputs.offset, 0xA0))
+                        tokenFee := calldataload(add(inputs.offset, 0xC0))
+                        domain := calldataload(add(inputs.offset, 0xE0))
+                        payerIsUser := calldataload(add(inputs.offset, 0x100))
                     }
                     address sender = msgSender();
                     address payer = payerIsUser ? sender : address(this);
@@ -357,6 +359,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         token: token,
                         bridge: bridge,
                         amount: amount,
+                        msgFee: msgFee,
                         tokenFee: tokenFee,
                         domain: domain,
                         payer: payer
@@ -369,13 +372,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         domain: domain
                     });
                 } else if (command == Commands.EXECUTE_CROSS_CHAIN) {
-                    // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, uint256, address, bytes))
+                    // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, uint256, address, uint256, address, bytes))
                     uint32 domain;
                     address icaRouter;
                     bytes32 remoteRouter;
                     bytes32 ism;
                     bytes32 commitment;
                     uint256 msgFee;
+                    address token;
+                    uint256 tokenFee;
                     address hook;
                     assembly {
                         domain := calldataload(inputs.offset)
@@ -384,11 +389,14 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         ism := calldataload(add(inputs.offset, 0x60))
                         commitment := calldataload(add(inputs.offset, 0x80))
                         msgFee := calldataload(add(inputs.offset, 0xA0))
-                        hook := calldataload(add(inputs.offset, 0xC0))
-                        // 0xE0 offset contains the hook metadata, decoded below
+                        token := calldataload(add(inputs.offset, 0xC0))
+                        tokenFee := calldataload(add(inputs.offset, 0xE0))
+                        hook := calldataload(add(inputs.offset, 0x100))
+                        // 0x120 offset contains the hook metadata, decoded below
                     }
-                    bytes calldata hookMetadata = inputs.toBytes(7);
+                    bytes calldata hookMetadata = inputs.toBytes(9);
 
+                    ERC20(token).approve(icaRouter, tokenFee);
                     IInterchainAccountRouter(icaRouter).callRemoteCommitReveal{value: msgFee}({
                         _destination: domain,
                         _router: remoteRouter,
