@@ -64,9 +64,8 @@ interface ITokenBridge {
     /// @param _recipient The recipient address (as bytes32)
     /// @param _amountOrId The amount of tokens to send
     /// @return messageId The identifier of the dispatched message
-    function transferRemote(
-        uint32 _destination,
-        bytes32 _recipient,
-        uint256 _amountOrId
-    ) external payable returns (bytes32 messageId);
+    function transferRemote(uint32 _destination, bytes32 _recipient, uint256 _amountOrId)
+        external
+        payable
+        returns (bytes32 messageId);
 }

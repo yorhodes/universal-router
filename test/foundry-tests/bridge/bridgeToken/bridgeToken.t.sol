@@ -51,6 +51,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -68,6 +69,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -86,6 +88,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(0), //bridge
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -103,6 +106,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -121,6 +125,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             0, // amount
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -134,6 +139,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             VELO_ADDRESS,
             address(rootXVeloTokenBridge),
             0, // amount
+            feeAmount,
+            0, // tokenFee
             leafDomain_2,
             true
         );
@@ -151,6 +158,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -171,6 +179,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -188,6 +197,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             leafDomain,
             true
         );
@@ -218,7 +228,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
-            0,
+            0, // tokenFee
+            0, // domain
             true
         );
 
@@ -240,6 +251,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             mockDomainId,
             true
         );
@@ -262,6 +274,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -296,6 +309,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             ActionConstants.CONTRACT_BALANCE,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain,
             false
         );
@@ -383,7 +397,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
-            0,
+            0, // tokenFee
+            0, // domain
             true
         );
 
@@ -405,6 +420,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             mockDomainId,
             true
         );
@@ -427,6 +443,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -524,6 +541,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain_2,
             true
         );
@@ -560,6 +578,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             1000, // openUSDT is 6 decimals so can't use xVeloBridgeAmount
             feeAmount,
+            0, // tokenFee
             leafDomain_2,
             true
         );
@@ -600,7 +619,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
-            0,
+            0, // tokenFee
+            0, // domain
             true
         );
 
@@ -623,6 +643,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
+            0, // tokenFee
             mockDomainId,
             true
         );
@@ -646,6 +667,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -669,6 +691,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             0, // fee amount
+            0, // tokenFee
             leafDomain_2,
             true
         );
@@ -692,6 +715,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             ActionConstants.CONTRACT_BALANCE,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain_2,
             false
         );
@@ -782,7 +806,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
-            0,
+            0, // tokenFee
+            0, // domain
             true
         );
 
@@ -805,6 +830,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
+            0, // tokenFee
             mockDomainId,
             true
         );
@@ -828,6 +854,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -851,6 +878,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             0, // fee amount
+            0, // tokenFee
             leafDomain_2,
             true
         );
@@ -936,6 +964,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -972,6 +1001,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             1000, // openUSDT is 6 decimals so can't use xVeloBridgeAmount
             feeAmount,
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -1012,6 +1042,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             0, // fee amount
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -1070,6 +1101,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             0, // fee amount
+            0, // tokenFee
             rootDomain,
             true
         );
@@ -1120,6 +1152,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             openUsdtBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain,
             false // payer is router
         );
@@ -1163,6 +1196,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain_2,
             false // payer is router
         );
@@ -1205,6 +1239,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             xVeloBridgeAmount,
             feeAmount + leftoverETH,
+            0, // tokenFee
             rootDomain,
             false // payer is router
         );

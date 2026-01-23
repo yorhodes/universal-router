@@ -1216,7 +1216,6 @@ library Math {
         Ceil, // Toward positive infinity
         Trunc, // Toward zero
         Expand // Away from zero
-
     }
 
     /**
@@ -1949,7 +1948,8 @@ abstract contract Initializable {
     modifier initializer() {
         bool isTopLevelCall = !_initializing;
         require(
-            (isTopLevelCall && _initialized < 1) || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1),
+            (isTopLevelCall && _initialized < 1)
+                || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1),
             'Initializable: contract is already initialized'
         );
         _initialized = 1;
@@ -3345,10 +3345,7 @@ abstract contract BaseTokenBridge is ITokenBridge, IHLHandler, ISpecifiesInterch
         /// @dev If custom hook is set, it should be used to estimate gas
         uint256 gasLimit = GAS_LIMIT();
         return StandardHookMetadata.formatMetadata({
-            _msgValue: 0,
-            _gasLimit: gasLimit,
-            _refundAddress: _refundAddress,
-            _customMetadata: ''
+            _msgValue: 0, _gasLimit: gasLimit, _refundAddress: _refundAddress, _customMetadata: ''
         });
     }
 
@@ -3400,11 +3397,7 @@ contract LeafTokenBridge is BaseTokenBridge {
         bytes memory message = abi.encodePacked(_recipient, _amount);
 
         _send({
-            _amount: _amount,
-            _recipient: _recipient,
-            _domain: _domain,
-            _message: message,
-            _refundAddress: msg.sender
+            _amount: _amount, _recipient: _recipient, _domain: _domain, _message: message, _refundAddress: msg.sender
         });
     }
 
@@ -3490,8 +3483,8 @@ contract LeafTokenBridge is BaseTokenBridge {
 
 ██╗     ███████╗ █████╗ ███████╗███████╗███████╗ ██████╗██████╗  ██████╗ ██╗    ██╗████████╗ ██████╗ ██╗  ██╗███████╗███╗   ██╗██████╗ ██████╗ ██╗██████╗  ██████╗ ███████╗
 ██║     ██╔════╝██╔══██╗██╔════╝██╔════╝██╔════╝██╔════╝██╔══██╗██╔═══██╗██║    ██║╚══██╔══╝██╔═══██╗██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██╔══██╗██║██╔══██╗██╔════╝ ██╔════╝
-██║     █████╗  ███████║█████╗  █████╗  ███████╗██║     ██████╔╝██║   ██║██║ █╗ ██║   ██║   ██║   ██║█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██████╔╝██║██║  ██║██║  ███╗█████╗  
-██║     ██╔══╝  ██╔══██║██╔══╝  ██╔══╝  ╚════██║██║     ██╔══██╗██║   ██║██║███╗██║   ██║   ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██╔══██╗██║██║  ██║██║   ██║██╔══╝  
+██║     █████╗  ███████║█████╗  █████╗  ███████╗██║     ██████╔╝██║   ██║██║ █╗ ██║   ██║   ██║   ██║█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██████╔╝██║██║  ██║██║  ███╗█████╗
+██║     ██╔══╝  ██╔══██║██╔══╝  ██╔══╝  ╚════██║██║     ██╔══██╗██║   ██║██║███╗██║   ██║   ██║   ██║██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██╔══██╗██║██║  ██║██║   ██║██╔══╝
 ███████╗███████╗██║  ██║██║     ███████╗███████║╚██████╗██║  ██║╚██████╔╝╚███╔███╔╝   ██║   ╚██████╔╝██║  ██╗███████╗██║ ╚████║██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗
 ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝
 
@@ -3539,10 +3532,7 @@ contract LeafEscrowTokenBridge is LeafTokenBridge, ILeafEscrowTokenBridge {
         }
 
         return StandardHookMetadata.formatMetadata({
-            _msgValue: 0,
-            _gasLimit: gasLimit,
-            _refundAddress: _refundAddress,
-            _customMetadata: ''
+            _msgValue: 0, _gasLimit: gasLimit, _refundAddress: _refundAddress, _customMetadata: ''
         });
     }
 

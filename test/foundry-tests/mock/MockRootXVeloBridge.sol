@@ -1621,7 +1621,6 @@ library Math {
         Ceil, // Toward positive infinity
         Trunc, // Toward zero
         Expand // Away from zero
-
     }
 
     /**
@@ -2673,7 +2672,8 @@ abstract contract Initializable {
     modifier initializer() {
         bool isTopLevelCall = !_initializing;
         require(
-            (isTopLevelCall && _initialized < 1) || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1),
+            (isTopLevelCall && _initialized < 1)
+                || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1),
             'Initializable: contract is already initialized'
         );
         _initialized = 1;
@@ -4620,10 +4620,7 @@ abstract contract BaseTokenBridge is ITokenBridge, IHLHandler, ISpecifiesInterch
         /// @dev If custom hook is set, it should be used to estimate gas
         uint256 gasLimit = GAS_LIMIT();
         return StandardHookMetadata.formatMetadata({
-            _msgValue: 0,
-            _gasLimit: gasLimit,
-            _refundAddress: _refundAddress,
-            _customMetadata: ''
+            _msgValue: 0, _gasLimit: gasLimit, _refundAddress: _refundAddress, _customMetadata: ''
         });
     }
 
@@ -4739,13 +4736,14 @@ contract RootTokenBridge is BaseTokenBridge, IRootTokenBridge, Paymaster {
         if (_whitelist.contains({value: msg.sender})) {
             if (msg.value != 0) revert Whitelisted();
             metadata = _generateGasMetadata({_hook: _hook, _refundAddress: paymasterVault, _message: message});
-            fee = Mailbox(mailbox).quoteDispatch({
-                destinationDomain: _domain,
-                recipientAddress: TypeCasts.addressToBytes32(address(this)),
-                messageBody: message,
-                metadata: metadata,
-                hook: IPostDispatchHook(_hook)
-            });
+            fee = Mailbox(mailbox)
+                .quoteDispatch({
+                    destinationDomain: _domain,
+                    recipientAddress: TypeCasts.addressToBytes32(address(this)),
+                    messageBody: message,
+                    metadata: metadata,
+                    hook: IPostDispatchHook(_hook)
+                });
             if (fee > 0) {
                 _sponsorTransaction({_fee: fee});
             }

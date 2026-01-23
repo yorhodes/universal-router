@@ -163,13 +163,14 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
 
         zeroForOne = isExactIn ? tokenIn < tokenOut : tokenOut < tokenIn;
 
-        (amount0Delta, amount1Delta) = ICLPool(computePoolAddress(tokenIn, tokenOut, poolParam, isUni)).swap(
-            recipient,
-            zeroForOne,
-            amount,
-            (zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1),
-            abi.encode(path, payer, isUni)
-        );
+        (amount0Delta, amount1Delta) = ICLPool(computePoolAddress(tokenIn, tokenOut, poolParam, isUni))
+            .swap(
+                recipient,
+                zeroForOne,
+                amount,
+                (zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1),
+                abi.encode(path, payer, isUni)
+            );
     }
 
     /// @dev `poolParam` is `tickSpacing` in Slipstream pools and `fee` in UniV3 pools.

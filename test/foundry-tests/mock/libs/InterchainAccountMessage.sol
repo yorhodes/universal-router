@@ -57,12 +57,13 @@ library InterchainAccountMessage {
     {
         CallLib.Call[] memory _calls = new CallLib.Call[](1);
         _calls[0] = CallLib.build(_to, _value, _data);
-        return abi.encode(
-            TypeCasts.addressToBytes32(_owner),
-            _ism,
-            _calls,
-            EMPTY_SALT // Salts are expected when decoding.
-        );
+        return
+            abi.encode(
+                TypeCasts.addressToBytes32(_owner),
+                _ism,
+                _calls,
+                EMPTY_SALT // Salts are expected when decoding.
+            );
     }
 
     /**
@@ -73,11 +74,7 @@ library InterchainAccountMessage {
      * @param _calls The sequence of calls to make
      * @return Formatted message body
      */
-    function encode(address _owner, bytes32 _ism, CallLib.Call[] calldata _calls)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function encode(address _owner, bytes32 _ism, CallLib.Call[] calldata _calls) internal pure returns (bytes memory) {
         return encode(TypeCasts.addressToBytes32(_owner), _ism, _calls);
     }
 
@@ -89,11 +86,7 @@ library InterchainAccountMessage {
      * @param _calls The sequence of calls to make
      * @return Formatted message body
      */
-    function encode(bytes32 _owner, bytes32 _ism, CallLib.Call[] calldata _calls)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function encode(bytes32 _owner, bytes32 _ism, CallLib.Call[] calldata _calls) internal pure returns (bytes memory) {
         return encode(_owner, _ism, _calls, EMPTY_SALT);
     }
 

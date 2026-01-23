@@ -335,8 +335,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
         // for HypXERC20
         vm.prank(rootOpenUsdtTokenBridge.owner());
         rootOpenUsdtTokenBridge.enrollRemoteRouter({
-            _domain: leafDomain,
-            _router: _addressToBytes32(address(leafOpenUsdtTokenBridge))
+            _domain: leafDomain, _router: _addressToBytes32(address(leafOpenUsdtTokenBridge))
         });
 
         rootMailbox.addRemoteMailbox({_domain: leafDomain_2, _mailbox: leafMailbox_2});
@@ -351,8 +350,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
         // for HypXERC20
         vm.prank(leafOpenUsdtTokenBridge.owner());
         leafOpenUsdtTokenBridge.enrollRemoteRouter({
-            _domain: rootDomain,
-            _router: _addressToBytes32(address(rootOpenUsdtTokenBridge))
+            _domain: rootDomain, _router: _addressToBytes32(address(rootOpenUsdtTokenBridge))
         });
 
         vm.selectFork({forkId: leafId_2});

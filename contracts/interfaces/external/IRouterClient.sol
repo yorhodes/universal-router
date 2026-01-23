@@ -22,8 +22,5 @@ interface IRouterClient {
     /// @return fee returns execution fee for the message
     /// delivery to destination chain, denominated in the feeToken specified in the message.
     /// @dev Reverts with appropriate reason upon invalid message.
-    function getFee(uint64 destinationChainSelector, EVM2AnyMessage memory message)
-        external
-        view
-        returns (uint256 fee);
+    function getFee(uint64 destinationChainSelector, EVM2AnyMessage memory message) external view returns (uint256 fee);
 }
