@@ -5,6 +5,8 @@ import {BridgeTypes} from '../../../../contracts/libraries/BridgeTypes.sol';
 import {BridgeRouter} from '../../../../contracts/modules/bridge/BridgeRouter.sol';
 import {Commands} from '../../../../contracts/libraries/Commands.sol';
 import {IDomainRegistry} from '../../../../contracts/interfaces/external/IDomainRegistry.sol';
+import {HypERC20Collateral} from '@hyperlane/core/contracts/token/HypERC20Collateral.sol';
+import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 import './BaseOverrideBridge.sol';
 
 contract BridgeTokenTest is BaseOverrideBridge {
@@ -24,6 +26,9 @@ contract BridgeTokenTest is BaseOverrideBridge {
     uint256 leftoverETH = MESSAGE_FEE / 2;
     uint256 feeAmount = MESSAGE_FEE;
 
+    // HypERC20Collateral bridge for testing
+    HypERC20Collateral public hypERC20CollateralBridge;
+
     function setUp() public override {
         super.setUp();
 
@@ -36,6 +41,27 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.selectFork(rootId);
         deal(VELO_ADDRESS, users.alice, xVeloInitialBal);
+
+        // Deploy HypERC20Collateral bridge on root chain
+        vm.startPrank(users.owner);
+        hypERC20CollateralBridge = new HypERC20Collateral(
+            OPEN_USDT_ADDRESS, // wrapped token
+            1e18, // scale (1:1)
+            address(rootMailbox) // mailbox
+        );
+        hypERC20CollateralBridge.initialize(
+            address(rootMailbox.requiredHook()), // hook
+            address(rootMailbox.defaultIsm()), // ism
+            users.owner // owner
+        );
+        // Enroll remote router for leaf domain
+        hypERC20CollateralBridge.enrollRemoteRouter(
+            leafDomain, TypeCasts.addressToBytes32(address(leafOpenUsdtTokenBridge))
+        );
+        vm.stopPrank();
+
+        // Fund the collateral bridge with tokens (simulating existing liquidity)
+        deal(OPEN_USDT_ADDRESS, address(hypERC20CollateralBridge), openUsdtInitialBal);
 
         inputs = new bytes[](1);
 
@@ -1283,6 +1309,153 @@ contract BridgeTokenTest is BaseOverrideBridge {
         );
     }
 
+    /// HYP_ERC20_COLLATERAL TESTS ///
+
+    modifier whenBridgeTypeIsHYP_ERC20_COLLATERAL() {
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            OPEN_USDT_ADDRESS,
+            address(hypERC20CollateralBridge),
+            openUsdtBridgeAmount, // amount
+            feeAmount + leftoverETH, // msgFee
+            openUsdtBridgeAmount, // tokenFee (same as amount for collateral bridge)
+            leafDomain,
+            true
+        );
+
+        TestPostDispatchHook(address(rootMailbox.requiredHook())).setFee(MESSAGE_FEE);
+        _;
+    }
+
+    function test_HypERC20Collateral_WhenTokenIsNotTheBridgeToken()
+        external
+        whenBasicValidationsPass
+        whenBridgeTypeIsHYP_ERC20_COLLATERAL
+    {
+        // It should revert with {InvalidTokenAddress}
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            VELO_ADDRESS, // wrong token
+            address(hypERC20CollateralBridge),
+            openUsdtBridgeAmount,
+            feeAmount,
+            openUsdtBridgeAmount,
+            leafDomain,
+            true
+        );
+
+        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
+        router.execute{value: feeAmount}(commands, inputs);
+    }
+
+    function test_HypERC20Collateral_WhenNoTokenApprovalWasGiven()
+        external
+        whenBasicValidationsPass
+        whenBridgeTypeIsHYP_ERC20_COLLATERAL
+    {
+        // It should revert with {AllowanceExpired}
+        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
+        router.execute{value: feeAmount}(commands, inputs);
+    }
+
+    modifier whenUsingPermit2ForHypERC20Collateral() {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
+        rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
+        _;
+    }
+
+    function test_HypERC20Collateral_WhenUsingPermit2()
+        external
+        whenBasicValidationsPass
+        whenBridgeTypeIsHYP_ERC20_COLLATERAL
+        whenUsingPermit2ForHypERC20Collateral
+    {
+        // It should bridge the amount to destination chain
+        // It should return excess fee if any
+        // It should leave no dangling ERC20 approvals
+        // It should emit {UniversalRouterBridge} event
+
+        uint256 balanceBefore = address(users.alice).balance;
+
+        vm.expectEmit(address(router));
+        emit Dispatcher.UniversalRouterBridge(
+            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
+        );
+        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
+
+        uint256 balanceAfter = address(users.alice).balance;
+
+        // Verify token transfer occurred - tokens moved from alice to bridge
+        assertEq(
+            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
+            openUsdtInitialBal - openUsdtBridgeAmount,
+            'oUSDT balance should decrease by bridge amount'
+        );
+
+        // Assert excess fee was refunded
+        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
+        // Assert no dangling ERC20 approvals
+        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
+        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+    }
+
+    modifier whenUsingDirectApprovalForHypERC20Collateral() {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        _;
+    }
+
+    function test_HypERC20Collateral_WhenUsingDirectApproval()
+        external
+        whenBasicValidationsPass
+        whenBridgeTypeIsHYP_ERC20_COLLATERAL
+        whenUsingDirectApprovalForHypERC20Collateral
+    {
+        // It should bridge the amount to destination chain
+        // It should return excess fee if any
+        // It should leave no dangling ERC20 approvals
+        // It should emit {UniversalRouterBridge} event
+
+        uint256 balanceBefore = address(users.alice).balance;
+
+        vm.expectEmit(address(router));
+        emit Dispatcher.UniversalRouterBridge(
+            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
+        );
+        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
+
+        uint256 balanceAfter = address(users.alice).balance;
+
+        // Verify token transfer occurred - tokens moved from alice to bridge
+        assertEq(
+            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
+            openUsdtInitialBal - openUsdtBridgeAmount,
+            'oUSDT balance should decrease by bridge amount'
+        );
+
+        // Assert excess fee was refunded
+        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
+        // Assert no dangling ERC20 approvals
+        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
+        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+    }
+
+    function testGas_HypERC20CollateralBridgePermit2() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
+        rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
+
+        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_Permit2');
+    }
+
+    function testGas_HypERC20CollateralBridgeDirectApproval() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+
+        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_DirectApproval');
+    }
+
     function _assertXVelo(uint256 _bridgeAmount) private {
         if (vm.activeFork() == rootId) {
             // Verify token transfer occurred
@@ -1344,6 +1517,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
             ActionConstants.CONTRACT_BALANCE,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain,
             false
         );
@@ -1376,6 +1550,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootXVeloTokenBridge),
             ActionConstants.CONTRACT_BALANCE,
             feeAmount + leftoverETH,
+            0, // tokenFee
             leafDomain_2,
             false
         );
