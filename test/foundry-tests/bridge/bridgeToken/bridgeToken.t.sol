@@ -1421,8 +1421,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             'WETH balance should decrease by bridge amount'
         );
 
-        // Assert fee was consumed (HypERC20Collateral passes full msgFee to mailbox, no refund mechanism)
-        assertEq(balanceAfter, balanceBefore - (feeAmount + leftoverETH), 'Fee not consumed correctly');
+        // Assert fee was consumed and excess refunded
+        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
         // Assert no dangling ERC20 approvals
         assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
         assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
@@ -1469,8 +1469,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             'WETH balance should decrease by bridge amount'
         );
 
-        // Assert fee was consumed (HypERC20Collateral passes full msgFee to mailbox, no refund mechanism)
-        assertEq(balanceAfter, balanceBefore - (feeAmount + leftoverETH), 'Fee not consumed correctly');
+        // Assert fee was consumed and excess refunded
+        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
         // Assert no dangling ERC20 approvals
         assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
         assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);

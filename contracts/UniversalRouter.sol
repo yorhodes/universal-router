@@ -64,6 +64,12 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
                 revert ExecutionFailed({commandIndex: commandIndex, message: output});
             }
         }
+
+        // Refund any remaining ETH to the caller
+        if (address(this).balance > 0) {
+            (success,) = msg.sender.call{value: address(this).balance}('');
+            if (!success) revert InvalidEthSender();
+        }
     }
 
     function successRequired(bytes1 command) internal pure returns (bool) {
