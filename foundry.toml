@@ -12,7 +12,7 @@ remappings = [
   "@openzeppelin/contracts/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/lib/openzeppelin-contracts/contracts/",
 ]
 
-optimizer_runs = 20000
+optimizer_runs = 10000
 
 fs_permissions = [
   { access = "read", path = "./script/deployParameters/" },
@@ -56,10 +56,11 @@ swell = "${SWELL_RPC_URL}"
 unichain = "${UNICHAIN_RPC_URL}"
 
 [etherscan]
-base = { key = "${ETHERSCAN_API_KEY}"}
-celo = { key = "${ETHERSCAN_API_KEY}"}
-fraxtal = { key = "${ETHERSCAN_API_KEY}"}
-optimism = { key = "${ETHERSCAN_API_KEY}"}
+base = { key = "${BASE_ETHERSCAN_API_KEY}"}
+celo = { key = "${CELO_ETHERSCAN_API_KEY}"}
+fraxtal = { key = "${FRAXTAL_ETHERSCAN_API_KEY}"}
+optimism = { key = "${OPTIMISM_ETHERSCAN_API_KEY}"}
+unichain = { key = "${UNICHAIN_ETHERSCAN_API_KEY}"}
 
 [profile.hardhat] # we have to use 4.9.6 here because of hyperlane
 remappings = [
