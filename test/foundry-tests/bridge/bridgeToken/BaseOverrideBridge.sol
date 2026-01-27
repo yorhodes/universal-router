@@ -70,7 +70,9 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
         rps = SafeCast.toUint128(rootBufferCap / DAY);
         rootXVelo.addBridge(
             MintLimits.RateLimitMidPointInfo({
-                bufferCap: rootBufferCap, bridge: address(rootXVeloTokenBridge), rateLimitPerSecond: rps
+                bufferCap: rootBufferCap,
+                bridge: address(rootXVeloTokenBridge),
+                rateLimitPerSecond: rps
             })
         );
         vm.stopPrank();
@@ -102,7 +104,9 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
         rps = SafeCast.toUint128(leafBufferCap / DAY);
         leafXVelo.addBridge(
             MintLimits.RateLimitMidPointInfo({
-                bufferCap: leafBufferCap, bridge: address(leafXVeloTokenBridge), rateLimitPerSecond: rps
+                bufferCap: leafBufferCap,
+                bridge: address(leafXVeloTokenBridge),
+                rateLimitPerSecond: rps
             })
         );
         vm.stopPrank();
