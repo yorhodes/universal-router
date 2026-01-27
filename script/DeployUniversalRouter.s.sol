@@ -37,7 +37,7 @@ abstract contract DeployUniversalRouter is Script, Constants {
     address public permit2 = 0x494bbD8A3302AcA833D307D11838f18DbAdA9C25;
     address public unsupported = 0x61fF070AD105D5aa6d8F9eA21212CB574EeFCAd5;
 
-    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
+    address public deployer = 0x9Bd11B31c67609Ba3772077A86cc5224e7CAE21A;
 
     address constant UNSUPPORTED_PROTOCOL = address(0);
     bytes32 constant BYTES32_ZERO = bytes32(0);
