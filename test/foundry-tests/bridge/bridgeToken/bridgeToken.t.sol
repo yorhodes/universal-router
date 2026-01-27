@@ -26,8 +26,12 @@ contract BridgeTokenTest is BaseOverrideBridge {
     uint256 leftoverETH = MESSAGE_FEE / 2;
     uint256 feeAmount = MESSAGE_FEE;
 
-    // HypERC20Collateral bridge for testing
+    // HypERC20Collateral bridges for testing (uses WETH as collateral on both chains)
     HypERC20Collateral public hypERC20CollateralBridge;
+    HypERC20Collateral public leafHypERC20CollateralBridge;
+    // Bridge amounts for HypERC20Collateral tests (using WETH)
+    uint256 public wethBridgeAmount = 0.1 ether;
+    uint256 public wethInitialBal = wethBridgeAmount * 2;
 
     function setUp() public override {
         super.setUp();
@@ -42,11 +46,11 @@ contract BridgeTokenTest is BaseOverrideBridge {
         vm.selectFork(rootId);
         deal(VELO_ADDRESS, users.alice, xVeloInitialBal);
 
-        // Deploy HypERC20Collateral bridge on root chain
+        // Deploy HypERC20Collateral bridge on root chain using WETH as collateral
         vm.startPrank(users.owner);
         hypERC20CollateralBridge = new HypERC20Collateral(
-            OPEN_USDT_ADDRESS, // wrapped token
-            1e18, // scale (1:1)
+            WETH9_ADDRESS, // wrapped token (WETH)
+            1, // scale (1:1, no decimals adjustment needed)
             address(rootMailbox) // mailbox
         );
         hypERC20CollateralBridge.initialize(
@@ -54,14 +58,39 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(rootMailbox.defaultIsm()), // ism
             users.owner // owner
         );
-        // Enroll remote router for leaf domain
-        hypERC20CollateralBridge.enrollRemoteRouter(
-            leafDomain, TypeCasts.addressToBytes32(address(leafOpenUsdtTokenBridge))
+        vm.stopPrank();
+
+        // Deploy HypERC20Collateral bridge on leaf chain using WETH as collateral
+        vm.selectFork(leafId);
+        vm.startPrank(users.owner);
+        leafHypERC20CollateralBridge = new HypERC20Collateral(
+            WETH9_ADDRESS, // wrapped token (WETH - same address on superchain)
+            1, // scale (1:1)
+            address(leafMailbox) // mailbox
+        );
+        leafHypERC20CollateralBridge.initialize(
+            address(leafMailbox.requiredHook()), // hook
+            address(leafMailbox.defaultIsm()), // ism
+            users.owner // owner
+        );
+        // Enroll collateral bridge as remote router
+        leafHypERC20CollateralBridge.enrollRemoteRouter(
+            rootDomain, TypeCasts.addressToBytes32(address(hypERC20CollateralBridge))
         );
         vm.stopPrank();
 
-        // Fund the collateral bridge with tokens (simulating existing liquidity)
-        deal(OPEN_USDT_ADDRESS, address(hypERC20CollateralBridge), openUsdtInitialBal);
+        // Fund leaf collateral bridge with WETH liquidity
+        deal(WETH9_ADDRESS, address(leafHypERC20CollateralBridge), wethInitialBal);
+
+        // Go back to root and enroll leaf collateral bridge as remote router
+        vm.selectFork(rootId);
+        vm.prank(users.owner);
+        hypERC20CollateralBridge.enrollRemoteRouter(
+            leafDomain, TypeCasts.addressToBytes32(address(leafHypERC20CollateralBridge))
+        );
+
+        // Fund alice with WETH for HypERC20Collateral tests
+        deal(WETH9_ADDRESS, users.alice, wethInitialBal);
 
         inputs = new bytes[](1);
 
@@ -1315,11 +1344,11 @@ contract BridgeTokenTest is BaseOverrideBridge {
         inputs[0] = abi.encode(
             uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
             ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
+            WETH9_ADDRESS,
             address(hypERC20CollateralBridge),
-            openUsdtBridgeAmount, // amount
+            wethBridgeAmount, // amount
             feeAmount + leftoverETH, // msgFee
-            openUsdtBridgeAmount, // tokenFee (same as amount for collateral bridge)
+            wethBridgeAmount, // tokenFee (same as amount for collateral bridge)
             leafDomain,
             true
         );
@@ -1339,9 +1368,9 @@ contract BridgeTokenTest is BaseOverrideBridge {
             ActionConstants.MSG_SENDER,
             VELO_ADDRESS, // wrong token
             address(hypERC20CollateralBridge),
-            openUsdtBridgeAmount,
+            wethBridgeAmount,
             feeAmount,
-            openUsdtBridgeAmount,
+            wethBridgeAmount,
             leafDomain,
             true
         );
@@ -1361,8 +1390,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
     }
 
     modifier whenUsingPermit2ForHypERC20Collateral() {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
+        ERC20(WETH9_ADDRESS).approve(address(rootPermit2), type(uint256).max);
+        rootPermit2.approve(WETH9_ADDRESS, address(router), type(uint160).max, type(uint48).max);
         _;
     }
 
@@ -1380,29 +1409,37 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
-        );
+        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, WETH9_ADDRESS, wethBridgeAmount, leafDomain);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
 
         // Verify token transfer occurred - tokens moved from alice to bridge
         assertEq(
-            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
-            openUsdtInitialBal - openUsdtBridgeAmount,
-            'oUSDT balance should decrease by bridge amount'
+            ERC20(WETH9_ADDRESS).balanceOf(users.alice),
+            wethInitialBal - wethBridgeAmount,
+            'WETH balance should decrease by bridge amount'
         );
 
-        // Assert excess fee was refunded
-        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
+        // Assert fee was consumed (HypERC20Collateral passes full msgFee to mailbox, no refund mechanism)
+        assertEq(balanceAfter, balanceBefore - (feeAmount + leftoverETH), 'Fee not consumed correctly');
         // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+        assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
+        assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+
+        // Verify destination balance - process message on leaf chain and check recipient received WETH
+        vm.selectFork(leafId);
+        leafMailbox.processNextInboundMessage();
+
+        assertEq(
+            ERC20(WETH9_ADDRESS).balanceOf(users.alice),
+            wethBridgeAmount,
+            'WETH balance should match the bridge amount on leaf after bridge'
+        );
     }
 
     modifier whenUsingDirectApprovalForHypERC20Collateral() {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        ERC20(WETH9_ADDRESS).approve(address(router), type(uint256).max);
         _;
     }
 
@@ -1420,37 +1457,45 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
-        );
+        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, WETH9_ADDRESS, wethBridgeAmount, leafDomain);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
 
         // Verify token transfer occurred - tokens moved from alice to bridge
         assertEq(
-            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
-            openUsdtInitialBal - openUsdtBridgeAmount,
-            'oUSDT balance should decrease by bridge amount'
+            ERC20(WETH9_ADDRESS).balanceOf(users.alice),
+            wethInitialBal - wethBridgeAmount,
+            'WETH balance should decrease by bridge amount'
         );
 
-        // Assert excess fee was refunded
-        assertEq(balanceAfter, balanceBefore - feeAmount, 'Excess fee not refunded');
+        // Assert fee was consumed (HypERC20Collateral passes full msgFee to mailbox, no refund mechanism)
+        assertEq(balanceAfter, balanceBefore - (feeAmount + leftoverETH), 'Fee not consumed correctly');
         // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+        assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
+        assertEq(ERC20(WETH9_ADDRESS).allowance(address(router), address(hypERC20CollateralBridge)), 0);
+
+        // Verify destination balance - process message on leaf chain and check recipient received WETH
+        vm.selectFork(leafId);
+        leafMailbox.processNextInboundMessage();
+
+        assertEq(
+            ERC20(WETH9_ADDRESS).balanceOf(users.alice),
+            wethBridgeAmount,
+            'WETH balance should match the bridge amount on leaf after bridge'
+        );
     }
 
     function testGas_HypERC20CollateralBridgePermit2() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
+        ERC20(WETH9_ADDRESS).approve(address(rootPermit2), type(uint256).max);
+        rootPermit2.approve(WETH9_ADDRESS, address(router), type(uint160).max, type(uint48).max);
 
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_Permit2');
     }
 
     function testGas_HypERC20CollateralBridgeDirectApproval() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        ERC20(WETH9_ADDRESS).approve(address(router), type(uint256).max);
 
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_DirectApproval');
