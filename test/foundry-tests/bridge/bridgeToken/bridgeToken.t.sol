@@ -4,9 +4,11 @@ pragma solidity ^0.8.24;
 import {BridgeTypes} from '../../../../contracts/libraries/BridgeTypes.sol';
 import {BridgeRouter} from '../../../../contracts/modules/bridge/BridgeRouter.sol';
 import {Commands} from '../../../../contracts/libraries/Commands.sol';
+import {Constants} from '../../../../contracts/libraries/Constants.sol';
 import {IDomainRegistry} from '../../../../contracts/interfaces/external/IDomainRegistry.sol';
 import {HypERC20Collateral} from '@hyperlane/core/contracts/token/HypERC20Collateral.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
+import {ProtocolFee} from '@hyperlane/core/contracts/hooks/ProtocolFee.sol';
 import './BaseOverrideBridge.sol';
 
 contract BridgeTokenTest is BaseOverrideBridge {
@@ -29,6 +31,9 @@ contract BridgeTokenTest is BaseOverrideBridge {
     // HypERC20Collateral bridges for testing (uses WETH as collateral on both chains)
     HypERC20Collateral public hypERC20CollateralBridge;
     HypERC20Collateral public leafHypERC20CollateralBridge;
+    // ProtocolFee hooks for HypERC20Collateral bridges (properly refunds excess ETH)
+    ProtocolFee public rootProtocolFeeHook;
+    ProtocolFee public leafProtocolFeeHook;
     // Bridge amounts for HypERC20Collateral tests (using WETH)
     uint256 public wethBridgeAmount = 0.1 ether;
     uint256 public wethInitialBal = wethBridgeAmount * 2;
@@ -46,30 +51,46 @@ contract BridgeTokenTest is BaseOverrideBridge {
         vm.selectFork(rootId);
         deal(VELO_ADDRESS, users.alice, xVeloInitialBal);
 
-        // Deploy HypERC20Collateral bridge on root chain using WETH as collateral
+        // Deploy ProtocolFee hook on root chain for HypERC20Collateral (properly refunds excess ETH)
         vm.startPrank(users.owner);
+        rootProtocolFeeHook = new ProtocolFee(
+            1 ether, // maxProtocolFee
+            MESSAGE_FEE, // protocolFee
+            users.owner, // beneficiary
+            users.owner // owner
+        );
+
+        // Deploy HypERC20Collateral bridge on root chain using WETH as collateral
         hypERC20CollateralBridge = new HypERC20Collateral(
             WETH9_ADDRESS, // wrapped token (WETH)
             1, // scale (1:1, no decimals adjustment needed)
             address(rootMailbox) // mailbox
         );
         hypERC20CollateralBridge.initialize(
-            address(rootMailbox.requiredHook()), // hook
+            address(rootProtocolFeeHook), // hook (ProtocolFee which refunds excess)
             address(rootMailbox.defaultIsm()), // ism
             users.owner // owner
         );
         vm.stopPrank();
 
-        // Deploy HypERC20Collateral bridge on leaf chain using WETH as collateral
+        // Deploy ProtocolFee hook on leaf chain for HypERC20Collateral
         vm.selectFork(leafId);
         vm.startPrank(users.owner);
+        leafProtocolFeeHook = new ProtocolFee(
+            1 ether, // maxProtocolFee
+            MESSAGE_FEE, // protocolFee
+            users.owner, // beneficiary
+            users.owner // owner
+        );
+
+        // Deploy HypERC20Collateral bridge on leaf chain using WETH as collateral
         leafHypERC20CollateralBridge = new HypERC20Collateral(
             WETH9_ADDRESS, // wrapped token (WETH - same address on superchain)
             1, // scale (1:1)
             address(leafMailbox) // mailbox
         );
         leafHypERC20CollateralBridge.initialize(
-            address(leafMailbox.requiredHook()), // hook
+            address(leafProtocolFeeHook), // hook (ProtocolFee which refunds excess)
             address(leafMailbox.defaultIsm()), // ism
             users.owner // owner
         );
@@ -1341,6 +1362,9 @@ contract BridgeTokenTest is BaseOverrideBridge {
     /// HYP_ERC20_COLLATERAL TESTS ///
 
     modifier whenBridgeTypeIsHYP_ERC20_COLLATERAL() {
+        // Add SWEEP command after BRIDGE_TOKEN to refund excess ETH
+        commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)), bytes1(uint8(Commands.SWEEP)));
+        inputs = new bytes[](2);
         inputs[0] = abi.encode(
             uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
             ActionConstants.MSG_SENDER,
@@ -1352,8 +1376,9 @@ contract BridgeTokenTest is BaseOverrideBridge {
             leafDomain,
             true
         );
-
-        TestPostDispatchHook(address(rootMailbox.requiredHook())).setFee(MESSAGE_FEE);
+        // SWEEP ETH back to caller (address(0) = ETH, MSG_SENDER = caller, 0 = no minimum)
+        inputs[1] = abi.encode(Constants.ETH, ActionConstants.MSG_SENDER, 0);
+        // Note: ProtocolFee hook was initialized with MESSAGE_FEE in setUp(), no need to set fee here
         _;
     }
 
