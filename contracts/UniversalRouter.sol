@@ -13,7 +13,8 @@ import {IUniversalRouter} from './interfaces/IUniversalRouter.sol';
 
 contract UniversalRouter is IUniversalRouter, Dispatcher {
     constructor(RouterDeployParameters memory params)
-        RouterImmutables(RouterParameters(
+        RouterImmutables(
+            RouterParameters(
                 params.v2Factory,
                 params.v3Factory,
                 params.pairInitCodeHash,
@@ -22,7 +23,8 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
                 params.veloCLFactory,
                 params.veloV2InitCodeHash,
                 params.veloCLInitCodeHash
-            ))
+            )
+        )
         V4SwapRouter(params.v4PoolManager)
         PaymentsImmutables(PaymentsParameters(params.permit2, params.weth9))
     {}
