@@ -41,7 +41,7 @@ abstract contract DeployUniversalRouter is Script, Constants {
     address public permit2 = 0x494bbD8A3302AcA833D307D11838f18DbAdA9C25;
     address public unsupported = 0x61fF070AD105D5aa6d8F9eA21212CB574EeFCAd5;
 
-    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
+    address public deployer = 0xd750E4A971CC4D695C1215438D6d7aEC2269a7EF;
 
     address constant UNSUPPORTED_PROTOCOL = address(0);
     bytes32 constant BYTES32_ZERO = bytes32(0);
@@ -87,12 +87,12 @@ abstract contract DeployUniversalRouter is Script, Constants {
     function deploy() internal virtual {
         router = UniversalRouter(
             payable(cx.deployCreate3({
-                    salt: UNIVERSAL_ROUTER_ENTROPY_V4.calculateSalt({_deployer: deployer}),
+                    salt: UNIVERSAL_ROUTER_ENTROPY_V5.calculateSalt({_deployer: deployer}),
                     initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
                 }))
         );
 
-        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V4, _output: address(router)});
+        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V5, _output: address(router)});
     }
 
     function logParams() internal view {
