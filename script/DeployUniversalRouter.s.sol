@@ -87,12 +87,12 @@ abstract contract DeployUniversalRouter is Script, Constants {
     function deploy() internal virtual {
         router = UniversalRouter(
             payable(cx.deployCreate3({
-                    salt: UNIVERSAL_ROUTER_ENTROPY_V5.calculateSalt({_deployer: deployer}),
+                    salt: UNIVERSAL_ROUTER_ENTROPY_V6.calculateSalt({_deployer: deployer}),
                     initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
                 }))
         );
 
-        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V5, _output: address(router)});
+        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V6, _output: address(router)});
     }
 
     function logParams() internal view {
