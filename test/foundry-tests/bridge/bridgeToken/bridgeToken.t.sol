@@ -7,6 +7,10 @@ import {Commands} from '../../../../contracts/libraries/Commands.sol';
 import {Constants} from '../../../../contracts/libraries/Constants.sol';
 import {IDomainRegistry} from '../../../../contracts/interfaces/external/IDomainRegistry.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
+import {HypNative} from '@hyperlane/core/contracts/token/HypNative.sol';
+import {HypERC20} from '@hyperlane/core/contracts/token/HypERC20.sol';
+import {TestPostDispatchHook} from '@hyperlane/core/contracts/test/TestPostDispatchHook.sol';
+import {LinearFee} from '@hyperlane/core/contracts/token/fees/LinearFee.sol';
 import './BaseOverrideBridge.sol';
 
 contract BridgeTokenTest is BaseOverrideBridge {
@@ -30,10 +34,23 @@ contract BridgeTokenTest is BaseOverrideBridge {
     uint256 public usdcBridgeAmount = 1000 * USDC_1;
     uint256 public usdcInitialBal = usdcBridgeAmount * 2;
 
+    // HypNative (routed via HYP_ERC20_COLLATERAL sentinel with token=address(0))
+    HypNative public hypNative;
+    HypNative public leafHypNative;
+    uint256 public nativeBridgeAmount = 0.1 ether;
+    uint256 public nativeInitialBal = 10 ether;
+    uint256 public leafHypNativeLiquidity = 10 ether;
+
+    // HypERC20 synthetic (mint/burn) — routed via HYP_ERC20_COLLATERAL with token=address(hypERC20)
+    HypERC20 public hypERC20;
+    HypERC20 public leafHypERC20;
+    uint256 public hypERC20BridgeAmount = 1 ether;
+    uint256 public hypERC20InitialBal = 10 ether;
+
     function setUp() public override {
         super.setUp();
 
-        deal(address(users.alice), 1 ether);
+        deal(address(users.alice), nativeInitialBal);
         deal(OPEN_USDT_ADDRESS, users.alice, openUsdtInitialBal);
         deal(VELO_ADDRESS, users.alice, xVeloBridgeAmount);
 
@@ -49,6 +66,47 @@ contract BridgeTokenTest is BaseOverrideBridge {
         // Fund USDC bridge on Base with USDC liquidity for cross-chain payouts
         vm.selectFork(leafId);
         deal(BASE_USDC_ADDRESS, USDC_BASE_BRIDGE, usdcInitialBal);
+        vm.selectFork(rootId);
+
+        // Deploy HypNative on both forks — no pre-deployed native warp route exists.
+        vm.selectFork(leafId);
+        vm.startPrank(users.owner);
+        leafHypNative = new HypNative(1, 1, address(leafMailbox));
+        leafHypNative.initialize(address(0), address(0), users.owner);
+        vm.stopPrank();
+        vm.deal(address(leafHypNative), leafHypNativeLiquidity); // fund for outbound payouts
+
+        vm.selectFork(rootId);
+        vm.startPrank(users.owner);
+        hypNative = new HypNative(1, 1, address(rootMailbox));
+        hypNative.initialize(address(0), address(0), users.owner);
+        hypNative.enrollRemoteRouter(leafDomain, TypeCasts.addressToBytes32(address(leafHypNative)));
+        vm.stopPrank();
+
+        // Enroll root as remote on leaf
+        vm.selectFork(leafId);
+        vm.prank(users.owner);
+        leafHypNative.enrollRemoteRouter(rootDomain, TypeCasts.addressToBytes32(address(hypNative)));
+
+        // Deploy HypERC20 (synthetic mint/burn) on both forks. Initial supply on root only;
+        // leaf supply is created via cross-chain mint when messages are processed.
+        vm.startPrank(users.owner);
+        leafHypERC20 = new HypERC20(18, 1, 1, address(leafMailbox));
+        leafHypERC20.initialize(0, 'HypERC20', 'HYP', address(0), address(0), users.owner);
+        vm.stopPrank();
+
+        vm.selectFork(rootId);
+        vm.startPrank(users.owner);
+        hypERC20 = new HypERC20(18, 1, 1, address(rootMailbox));
+        hypERC20.initialize(hypERC20InitialBal, 'HypERC20', 'HYP', address(0), address(0), users.owner);
+        hypERC20.transfer(users.alice, hypERC20InitialBal);
+        hypERC20.enrollRemoteRouter(leafDomain, TypeCasts.addressToBytes32(address(leafHypERC20)));
+        vm.stopPrank();
+
+        vm.selectFork(leafId);
+        vm.prank(users.owner);
+        leafHypERC20.enrollRemoteRouter(rootDomain, TypeCasts.addressToBytes32(address(hypERC20)));
+
         vm.selectFork(rootId);
 
         inputs = new bytes[](1);
@@ -1469,6 +1527,346 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         router.execute{value: feeAmount}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_DirectApproval');
+    }
+
+    /// HYP_NATIVE TESTS (HypNative routed via HYP_ERC20_COLLATERAL with token=address(0)) ///
+
+    /// @dev Encodes a BRIDGE_TOKEN input for HypNative using the sentinel. `amount`
+    /// is CONTRACT_BALANCE so the client passes identical structure to the ERC20
+    /// flow — the router resolves the input from `address(this).balance` and
+    /// computes fees via quoteTransferRemote.
+    modifier whenBridgeTypeIsHYP_NATIVE() {
+        commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)));
+        inputs = new bytes[](1);
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL), // sentinel: HypNative selected by token=address(0)
+            ActionConstants.MSG_SENDER,
+            Constants.ETH, // token=address(0) → native path
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE, // consume router's native balance
+            0, // msgFee unused on native path; branch forwards `amount` as value
+            nativeBridgeAmount, // maxTokenFee cap
+            leafDomain,
+            false // payerIsUser: ignored on native path (no ERC20 pull)
+        );
+        _;
+    }
+
+    function _setHypNativeHookFee(uint256 fee) internal returns (uint256 hookFee) {
+        TestPostDispatchHook(address(rootMailbox.requiredHook())).setFee(fee);
+        TestPostDispatchHook(address(rootMailbox.defaultHook())).setFee(fee);
+        hookFee = 2 * fee;
+    }
+
+    /// @dev Verify the bridged native arrives on the destination by processing the
+    /// inbound mailbox message and asserting alice's leaf balance delta.
+    function _assertHypNativeDelivery(uint256 bridgeAmount) private {
+        vm.selectFork(leafId);
+        uint256 before_ = users.alice.balance;
+        leafMailbox.processNextInboundMessage();
+        assertEq(users.alice.balance - before_, bridgeAmount, 'alice received bridgeAmount on leaf');
+    }
+
+    /// @notice Baseline: alice sends native as msg.value, router consumes full balance
+    /// via CONTRACT_BALANCE. Recipient (= collateral on origin) credited 1:1.
+    function test_HypNative_WhenNoFees() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 aliceBefore = users.alice.balance;
+        uint256 collateralBefore = address(hypNative).balance;
+
+        vm.expectEmit(address(router));
+        emit Dispatcher.UniversalRouterBridge(
+            users.alice, users.alice, Constants.ETH, nativeBridgeAmount, leafDomain
+        );
+        router.execute{value: nativeBridgeAmount}(commands, inputs);
+
+        assertEq(aliceBefore - users.alice.balance, nativeBridgeAmount, 'alice paid nativeBridgeAmount');
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            nativeBridgeAmount,
+            'collateral credited full bridgeAmount (no fees)'
+        );
+        assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(nativeBridgeAmount);
+    }
+
+    /// @notice Hook fee: same client logic (CONTRACT_BALANCE + maxTokenFee cap). The
+    /// router auto-deducts the hook fee from the balance — caller forwards the total
+    /// as msg.value and the bridge credits `amount - hookFee` to the recipient.
+    function test_HypNative_WithHookFee() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 hookFee = _setHypNativeHookFee(0.001 ether);
+        uint256 totalIn = nativeBridgeAmount + hookFee;
+
+        uint256 aliceBefore = users.alice.balance;
+        uint256 collateralBefore = address(hypNative).balance;
+
+        router.execute{value: totalIn}(commands, inputs);
+
+        assertEq(aliceBefore - users.alice.balance, totalIn, 'alice paid totalIn');
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            nativeBridgeAmount,
+            'collateral credited bridgeAmount (hook fee absorbed)'
+        );
+        assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(nativeBridgeAmount);
+    }
+
+    /// @notice Linear warp fee: same client logic. For rate=1%, totalIn=1.01 ETH
+    /// bridges exactly 1 ETH (quoteExactInputBridgeAmount resolves to amount²/(amount+f(amount))).
+    function test_HypNative_WithLinearWarpFee() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 expectedBridge = 1 ether;
+        uint256 totalIn = 1.01 ether; // rate 1%
+        // override amount and maxTokenFee for the 1%-rate math
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            Constants.ETH,
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE,
+            0,
+            totalIn - expectedBridge,
+            leafDomain,
+            false
+        );
+
+        vm.stopPrank();
+        LinearFee linearFee = new LinearFee(address(0), 0.02 ether, 1 ether, users.owner);
+        vm.prank(users.owner);
+        hypNative.setFeeRecipient(address(linearFee));
+        vm.startPrank(users.alice);
+
+        uint256 collateralBefore = address(hypNative).balance;
+
+        router.execute{value: totalIn}(commands, inputs);
+
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            expectedBridge,
+            'collateral credited 1 ETH bridgeAmount'
+        );
+        assertEq(address(linearFee).balance, totalIn - expectedBridge, 'linear fee recipient got overage');
+        assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(expectedBridge);
+    }
+
+    function test_HypNative_WhenTokenFeeExceedsMax() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 hookFee = _setHypNativeHookFee(0.001 ether);
+        uint256 totalIn = nativeBridgeAmount + hookFee;
+
+        // Tighten maxTokenFee to 1 wei below the actual fee
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            Constants.ETH,
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE,
+            0,
+            hookFee - 1,
+            leafDomain,
+            false
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(BridgeRouter.TokenFeeExceedsMax.selector, hookFee, hookFee - 1));
+        router.execute{value: totalIn}(commands, inputs);
+    }
+
+    /// @notice Origin-side ERC20→native→bridge composition with the same client
+    /// logic as the ERC20 collateral flow: TRANSFER_FROM + BRIDGE_TOKEN(CONTRACT_BALANCE).
+    /// WETH is unwrapped between the steps so the bridge sees native.
+    function test_HypNative_WethToNative_ThenBridge() external {
+        uint256 wethIn = nativeBridgeAmount;
+        weth.deposit{value: wethIn}();
+        weth.approve(address(router), type(uint256).max);
+
+        commands = abi.encodePacked(
+            bytes1(uint8(Commands.TRANSFER_FROM)),
+            bytes1(uint8(Commands.UNWRAP_WETH)),
+            bytes1(uint8(Commands.BRIDGE_TOKEN))
+        );
+        inputs = new bytes[](3);
+        inputs[0] = abi.encode(address(weth), address(router), wethIn);
+        inputs[1] = abi.encode(ActionConstants.ADDRESS_THIS, 0);
+        inputs[2] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            Constants.ETH,
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE,
+            0,
+            nativeBridgeAmount,
+            leafDomain,
+            false
+        );
+
+        uint256 collateralBefore = address(hypNative).balance;
+
+        router.execute(commands, inputs);
+
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            wethIn,
+            'collateral credited full WETH-derived native'
+        );
+        assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(wethIn);
+    }
+
+    /// @notice Combined native hook + linear warp fees with plain CONTRACT_BALANCE.
+    /// Router resolves input from balance, quote deducts both fees, client passes
+    /// no pre-computation. For rate=1% and hookFee, totalIn = 1.01 ETH + hookFee →
+    /// bridgeAmount = 1 ETH.
+    function test_HypNative_WithCombinedFees() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 hookFee = _setHypNativeHookFee(0.0005 ether);
+        uint256 expectedBridge = 1 ether;
+        uint256 totalIn = 1.01 ether + hookFee; // linear 1% + hook
+
+        vm.stopPrank();
+        LinearFee linearFee = new LinearFee(address(0), 0.02 ether, 1 ether, users.owner);
+        vm.prank(users.owner);
+        hypNative.setFeeRecipient(address(linearFee));
+        vm.startPrank(users.alice);
+
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            Constants.ETH,
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE,
+            0,
+            totalIn - expectedBridge,
+            leafDomain,
+            false
+        );
+
+        uint256 collateralBefore = address(hypNative).balance;
+
+        router.execute{value: totalIn}(commands, inputs);
+
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            expectedBridge,
+            'collateral credited bridgeAmount (hook + linear absorbed)'
+        );
+        assertEq(address(linearFee).balance, totalIn - expectedBridge - hookFee, 'linear fee = totalIn - bridge - hook');
+        assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(expectedBridge);
+    }
+
+    function testGas_HypNativeBridge() public whenBridgeTypeIsHYP_NATIVE {
+        router.execute{value: nativeBridgeAmount}(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypNative');
+    }
+
+    /// @notice Gas snapshot for the "router already holds native" path (e.g. after a
+    /// preceding swap+unwrap). Mirrors testGas_HypXERC20BridgeRouterBalance.
+    function testGas_HypNativeBridgeRouterBalance() public whenBridgeTypeIsHYP_NATIVE {
+        vm.deal(address(router), nativeBridgeAmount);
+        router.execute(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypNative_RouterBalance');
+    }
+
+    /// HYP_ERC20 SYNTHETIC TESTS (mint/burn — token() == address(this), so token == bridge in encoding) ///
+
+    modifier whenBridgeTypeIsHYP_ERC20_SYNTHETIC() {
+        commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)), bytes1(uint8(Commands.SWEEP)));
+        inputs = new bytes[](2);
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            address(hypERC20), // token
+            address(hypERC20), // bridge (synthetic: token == bridge)
+            hypERC20BridgeAmount,
+            feeAmount,
+            hypERC20BridgeAmount, // generous maxTokenFee
+            leafDomain,
+            true
+        );
+        inputs[1] = abi.encode(Constants.ETH, ActionConstants.MSG_SENDER, 0);
+        _;
+    }
+
+    /// @dev Verify the bridged HypERC20 arrives on the destination by processing the
+    /// inbound mailbox message and asserting alice's leaf balance delta (minted).
+    function _assertHypERC20Delivery(uint256 bridgeAmount) private {
+        vm.selectFork(leafId);
+        uint256 before_ = leafHypERC20.balanceOf(users.alice);
+        leafMailbox.processNextInboundMessage();
+        assertEq(leafHypERC20.balanceOf(users.alice) - before_, bridgeAmount, 'alice received bridgeAmount on leaf');
+    }
+
+    /// @notice Vanilla synthetic bridge with no fees configured. quoteExactInputBridgeAmount
+    /// collapses to bridgeAmount = amount (since linearQuotedTokens = amount). Router pulls
+    /// `amount` from alice, calls transferRemote(amount) which burns from router; leaf mints
+    /// to alice on delivery.
+    function test_HypERC20_WhenNoFees() external whenBasicValidationsPass whenBridgeTypeIsHYP_ERC20_SYNTHETIC {
+        hypERC20.approve(address(router), type(uint256).max);
+
+        uint256 aliceBefore = hypERC20.balanceOf(users.alice);
+        uint256 supplyBefore = hypERC20.totalSupply();
+
+        vm.expectEmit(address(router));
+        emit Dispatcher.UniversalRouterBridge(
+            users.alice, users.alice, address(hypERC20), hypERC20BridgeAmount, leafDomain
+        );
+        router.execute{value: feeAmount}(commands, inputs);
+
+        assertEq(aliceBefore - hypERC20.balanceOf(users.alice), hypERC20BridgeAmount, 'alice paid bridgeAmount');
+        assertEq(hypERC20.balanceOf(address(router)), 0, 'router drained');
+        assertEq(supplyBefore - hypERC20.totalSupply(), hypERC20BridgeAmount, 'supply burned by bridgeAmount');
+        assertEq(hypERC20.allowance(address(router), address(hypERC20)), 0, 'no dangling approval');
+
+        _assertHypERC20Delivery(hypERC20BridgeAmount);
+    }
+
+    /// @notice With LinearFee at 1% rate: alice supplies 1.01 ether, bridges 1 ether, fee
+    /// recipient receives 0.01 ether (minted). Mirrors test_HypNative_WithLinearWarpFee.
+    function test_HypERC20_WithLinearFee() external whenBasicValidationsPass whenBridgeTypeIsHYP_ERC20_SYNTHETIC {
+        uint256 expectedBridge = 1 ether;
+        uint256 totalIn = 1.01 ether;
+
+        // Override amount and maxTokenFee for the 1%-rate math
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            address(hypERC20),
+            address(hypERC20),
+            totalIn,
+            feeAmount,
+            totalIn - expectedBridge,
+            leafDomain,
+            true
+        );
+
+        vm.stopPrank();
+        LinearFee linearFee = new LinearFee(address(hypERC20), 0.02 ether, 1 ether, users.owner);
+        vm.prank(users.owner);
+        hypERC20.setFeeRecipient(address(linearFee));
+        vm.startPrank(users.alice);
+
+        hypERC20.approve(address(router), type(uint256).max);
+
+        uint256 aliceBefore = hypERC20.balanceOf(users.alice);
+
+        router.execute{value: feeAmount}(commands, inputs);
+
+        assertEq(aliceBefore - hypERC20.balanceOf(users.alice), totalIn, 'alice paid totalIn');
+        assertEq(
+            hypERC20.balanceOf(address(linearFee)), totalIn - expectedBridge, 'linear fee recipient minted overage'
+        );
+        assertEq(hypERC20.balanceOf(address(router)), 0, 'router drained');
+
+        _assertHypERC20Delivery(expectedBridge);
+    }
+
+    function testGas_HypERC20Bridge() public whenBridgeTypeIsHYP_ERC20_SYNTHETIC {
+        hypERC20.approve(address(router), type(uint256).max);
+        router.execute{value: feeAmount}(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypERC20_Synthetic');
     }
 
     function _assertXVelo(uint256 _bridgeAmount) private {

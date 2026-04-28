@@ -8,6 +8,7 @@ import {ITokenBridge, Quote, ITokenFee} from '@hyperlane/core/contracts/interfac
 
 import {IXVeloTokenBridge} from '../../interfaces/external/IXVeloTokenBridge.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
+import {Constants} from '../../libraries/Constants.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
 
 /// @title BridgeRouter
@@ -69,10 +70,15 @@ abstract contract BridgeRouter is Permit2Payments {
             uint256 tokenFee = amount - bridgeAmount;
             if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
-            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
-
-            executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
-            ERC20(token).safeApprove({to: bridge, amount: 0});
+            // Native (HypNative) path: token == Constants.ETH. Forward the full native `amount`
+            // to transferRemote — it covers bridgeAmount + all fees. No ERC20 pull/approve.
+            if (token == Constants.ETH) {
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: amount, domain: domain});
+            } else {
+                prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
+                ERC20(token).safeApprove({to: bridge, amount: 0});
+            }
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
         }
