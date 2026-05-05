@@ -18,24 +18,26 @@ contract DeployPermit2AndUnsupported is Script, Constants {
     address public unsupported;
     address public permit2;
 
-    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
+    address public deployer = 0xd750E4A971CC4D695C1215438D6d7aEC2269a7EF;
 
     ICreateX public cx = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
 
     // All chains from foundry.toml rpc_endpoints
     string[] public chains = [
+        'arbitrum',
         'base',
+        'celo',
+        'ethereum',
+        'fraxtal',
+        'ink',
         'lisk',
+        'metal',
         'mode',
         'optimism',
-        'fraxtal',
-        'metal',
-        'superseed',
-        'ink',
         'soneium',
+        'superseed',
         'swell',
-        'unichain',
-        'celo'
+        'unichain'
     ];
 
     function run() external {

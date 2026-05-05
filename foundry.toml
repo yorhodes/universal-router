@@ -43,8 +43,10 @@ optimizerSteps = ''
 runs = 5000
 
 [rpc_endpoints]
+arbitrum = "${ARBITRUM_RPC_URL}"
 base = "${BASE_RPC_URL}"
 celo = "${CELO_RPC_URL}"
+ethereum = "${ETHEREUM_RPC_URL}"
 fraxtal = "${FRAXTAL_RPC_URL}"
 ink = "${INK_RPC_URL}"
 lisk = "${LISK_RPC_URL}"
@@ -57,8 +59,10 @@ swell = "${SWELL_RPC_URL}"
 unichain = "${UNICHAIN_RPC_URL}"
 
 [etherscan]
+arbitrum = { key = "${ARBITRUM_ETHERSCAN_API_KEY}"}
 base = { key = "${BASE_ETHERSCAN_API_KEY}"}
 celo = { key = "${CELO_ETHERSCAN_API_KEY}"}
+ethereum = { key = "${ETHEREUM_ETHERSCAN_API_KEY}"}
 fraxtal = { key = "${FRAXTAL_ETHERSCAN_API_KEY}"}
 optimism = { key = "${OPTIMISM_ETHERSCAN_API_KEY}"}
 unichain = { key = "${UNICHAIN_ETHERSCAN_API_KEY}"}
